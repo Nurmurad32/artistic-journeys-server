@@ -13,13 +13,12 @@ app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
     const authorization = req.headers.authorization;
+    console.log("authorization",authorization)
     if (!authorization) {
         return res.status(401).send({ error: true, message: 'Unauthorized access' })
     }
     // bearer token
     const token = authorization.split(' ')[1];
-    // console.log('token',token)
-    // console.log(process.env.ACCESS_TOKEN_SECRET)
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if (err) {
             return res.status(401).send({ error: true, message: 'Unauthorized access' })
@@ -58,7 +57,7 @@ async function run() {
 
         app.post('/jwt', (req, res) => {
             const user = req.body;
-            console.log(user);
+            console.log("From jwt",user);
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '2h' })
             console.log('token', token)
             console.log(process.env.ACCESS_TOKEN_SECRET)
@@ -116,10 +115,11 @@ async function run() {
             if (role === 'admin' || role === 'instructor' || role === 'student') {
                 res.send({ role });
             }
-            else {
-                res.send({ role: null });
-            }
+            // else {
+            //     res.send({ role: null });
+            // }
         });
+
 
         app.post('/users', async (req, res) => {
             const user = req.body;
@@ -134,11 +134,11 @@ async function run() {
             res.send(result)
         })
 
-        app.patch('/users/admin/:id', async (req, res) => {
+        app.patch('/users/admin/:id',verifyJWT, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const updatedUser = req.body;
-            console.log(updatedUser)
+            console.log("updatedUser-role",updatedUser)
             const user = {
                 $set: {
                     role: updatedUser.role
@@ -148,7 +148,7 @@ async function run() {
             res.send(result)
         })
 
-        app.delete('/users/admin/:id', async (req, res) => {
+        app.delete('/users/admin/:id' ,verifyJWT, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await userCollection.deleteOne(query);
@@ -160,27 +160,28 @@ async function run() {
             const result = await classCollection.find().toArray();
             res.send(result);
         })
-        app.post('/classes', verifyJWT, async (req, res) => {
+        app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
             const newItem = req.body;
             const result = await classCollection.insertOne(newItem);
             res.send(result);
         })
 
-        app.patch('/classes/admin/:id', async (req, res) => {
+        app.patch('/classes/admin/:id', verifyJWT, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const updatedUser = req.body;
-            console.log(updatedUser)
+            console.log("updatedUser",updatedUser)
             const cls = {
                 $set: {
                     status: updatedUser.status
                 }
             }
             const result = await classCollection.updateOne(filter, cls);
+            // const insertApproved = await approvedClassCollection.insertOne(result);
             res.send(result)
         })
 
-        app.delete('/classes/admin/:id', async (req, res) => {
+        app.delete('/classes/admin/:id', verifyJWT , async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await classCollection.deleteOne(query);
@@ -202,14 +203,14 @@ async function run() {
             res.send(result);
         })
 
-        app.post('/carts', async (req, res) => {
+        app.post('/carts', verifyJWT, async (req, res) => {
             const item = req.body;
             console.log(item);
             const result = await cartCollection.insertOne(item);
             res.send(result);
         })
 
-        app.delete('/carts/:id', async (req, res) => {
+        app.delete('/carts/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await cartCollection.deleteOne(query);
@@ -273,7 +274,7 @@ async function run() {
             res.send({ insertResult, deletedResult, classUpdateResult });
         })
 
-        app.get('/order-stats', async (req, res) => {
+        app.get('/class-status', async (req, res) => {
             const salesCountByClassItemId = await paymentCollection.aggregate([
                 {
                     $group: {
@@ -292,22 +293,13 @@ async function run() {
                     classItemId: item._id,
                     count: item.count,
                     classItem: classItem,
-                    
+
                 };
             }));
 
-            const restApprovedClasses =await classCollection.find({ status: "approved" }).toArray();
-
-            restApprovedClasses.forEach((classItem) => {
-                detailedClasses.push({
-                  classItemId: classItem._id,
-                  count: 0,
-                  classItem: classItem,
-                });
-              });
-            
               res.send(detailedClasses);
         });
+
 
 
         // Send a ping to confirm a successful connection
