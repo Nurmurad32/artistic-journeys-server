@@ -1,34 +1,16 @@
-const express = require('express')
-const cors = require('cors')
+const express = require('express');
+const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
-const app = express()
-require('dotenv').config()
-const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
+const app = express();
+require('dotenv').config();
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
+
 const port = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors())
+app.use(cors());
 app.use(express.json());
-
-const verifyJWT = (req, res, next) => {
-    const authorization = req.headers.authorization;
-    console.log("authorization",authorization)
-    if (!authorization) {
-        return res.status(401).send({ error: true, message: 'Unauthorized access' })
-    }
-    // bearer token
-    const token = authorization.split(' ')[1];
-    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-        if (err) {
-            return res.status(401).send({ error: true, message: 'Unauthorized access' })
-        }
-        req.decoded = decoded;
-        console.log('decoded', decoded);
-        next();
-    })
-}
-
 
 // --------------------------------------------------------------
 
@@ -57,12 +39,30 @@ async function run() {
 
         app.post('/jwt', (req, res) => {
             const user = req.body;
-            console.log("From jwt",user);
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '2h' })
+            console.log("From jwt", user);
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
             console.log('token', token)
             console.log(process.env.ACCESS_TOKEN_SECRET)
             res.send({ token })
         })
+
+        const verifyJWT = (req, res, next) => {
+            const authorization = req.headers.authorization;
+            console.log("authorization", authorization)
+            if (!authorization) {
+                return res.status(401).send({ message: 'Unauthorized access' })
+            }
+            // bearer token
+            const token = authorization.split(' ')[1];
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ error: true, message: 'Unauthorized access' })
+                }
+                req.decoded = decoded;
+                console.log('decoded', decoded);
+                next();
+            })
+        }
 
         // Warning: use verifyJWT before using verifyAdmin
         const verifyAdmin = async (req, res, next) => {
@@ -104,20 +104,23 @@ async function run() {
         app.get('/users/role/:email', verifyJWT, async (req, res) => {
             const email = req.params.email;
 
-            if (req.decoded.email !== email) {
-                res.send({ role: null });
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'unauthorized access' });
             }
 
             const query = { email: email };
             const user = await userCollection.findOne(query);
-            const role = user?.role || null;
 
-            if (role === 'admin' || role === 'instructor' || role === 'student') {
-                res.send({ role });
+
+            if (user) {
+                if (user.role === 'admin') {
+                    res.send({ role: 'admin' });
+                } else if (user.role === 'instructor') {
+                    res.send({ role: 'instructor' });
+                } else {
+                    res.send({ role: 'student' });
+                }
             }
-            // else {
-            //     res.send({ role: null });
-            // }
         });
 
 
@@ -134,21 +137,23 @@ async function run() {
             res.send(result)
         })
 
-        app.patch('/users/admin/:id',verifyJWT, verifyAdmin, async (req, res) => {
+        app.patch('/users/admin/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const updatedUser = req.body;
-            console.log("updatedUser-role",updatedUser)
+            console.log("updatedUser-role", updatedUser);
+
             const user = {
                 $set: {
                     role: updatedUser.role
                 }
-            }
-            const result = await userCollection.updateOne(filter, user);
-            res.send(result)
-        })
+            };
 
-        app.delete('/users/admin/:id' ,verifyJWT, verifyAdmin, async (req, res) => {
+            const result = await userCollection.updateOne(filter, user);
+            res.send(result);
+        });
+
+        app.delete('/users/admin/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await userCollection.deleteOne(query);
@@ -170,7 +175,7 @@ async function run() {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const updatedUser = req.body;
-            console.log("updatedUser",updatedUser)
+            console.log("updatedUser", updatedUser)
             const cls = {
                 $set: {
                     status: updatedUser.status
@@ -181,7 +186,7 @@ async function run() {
             res.send(result)
         })
 
-        app.delete('/classes/admin/:id', verifyJWT , async (req, res) => {
+        app.delete('/classes/admin/:id', verifyJWT, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await classCollection.deleteOne(query);
@@ -225,9 +230,6 @@ async function run() {
                 amount: amount,
                 currency: "usd",
                 payment_method_types: ['card']
-                // automatic_payment_methods: {
-                //   enabled: true,
-                // },
             })
             res.send({
                 clientSecret: paymentIntent.client_secret,
@@ -271,6 +273,7 @@ async function run() {
             }
 
             console.log(classUpdateResult)
+
             res.send({ insertResult, deletedResult, classUpdateResult });
         })
 
@@ -297,10 +300,44 @@ async function run() {
                 };
             }));
 
-              res.send(detailedClasses);
+            res.send(detailedClasses);
         });
 
+        app.get('/total-student-enrolled', async (req, res) => {
+            try {
+                // Define your aggregation pipeline
+                const pipeline = [
+                    {
+                        $group: {
+                            _id: '$classItemId',
+                            totalSold: { $sum: 1 },
+                            sales: { $push: { email: '$email' } }
+                        }
+                    }
+                ];
 
+                // Execute the aggregation pipeline
+                const salesByClass = await paymentCollection.aggregate(pipeline).toArray();
+
+                // Process the data to match user emails from the users table
+                for (const classSales of salesByClass) {
+                    const userEmails = [];
+                    for (const sale of classSales.sales) {
+                        const user = await userCollection.findOne({ email: sale.email });
+                        if (user) {
+                            userEmails.push(user.email);
+                        }
+                    }
+                    classSales.userEmails = userEmails;
+                }
+
+                // Send the response
+                res.json(salesByClass);
+            } catch (err) {
+                console.error('Error:', err);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
