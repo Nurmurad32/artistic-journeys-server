@@ -4,15 +4,15 @@ An online art and craft school facilitating seamless learning experiences with r
 
 
 >
->Live URL : [Bistro Boss](https://artistic-journeys.web.app/)
+>Live URL : [Artistic Journeys](https://artistic-journeys.web.app/)
 >
->Server Side URL : [Bistro Boss server](https://artistic-journeys-server.vercel.app/jwt)
+>Server Side URL : [Artistic Journeys server](https://artistic-journeys-server.vercel.app/jwt)
 
 >GitHub Link:
 >
->> Client Side Code : [Bistro Boss Client Side Code](https://github.com/Nurmurad32/artistic-journeys-client)
+>> Client Side Code : [Artistic Journeys Client Side Code](https://github.com/Nurmurad32/artistic-journeys-client)
 >>
->> Server Side Code : [Bistro Boss Server Side Code](https://github.com/Nurmurad32/artistic-journeys-server)
+>> Server Side Code : [Artistic Journeys Server Side Code](https://github.com/Nurmurad32/artistic-journeys-server)
 
 - Admin Login::
     - Email: artistic-admin@gmail.com Pass: Art123@
